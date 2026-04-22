@@ -89,7 +89,7 @@ document.addEventListener('visibilitychange', () => {
 
 function setFavicon(unread) {
   if (!faviconEl) return;
-  faviconEl.href = unread ? 'favicon-unread.png' : 'favicon.png';
+  faviconEl.href = unread ? 'favicon-unread.png' : 'imgs/chatter-logo-unread.png';
 }
 
 function incrementUnread() {
