@@ -1,5 +1,11 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 :root {
   --bg: #0a0a0f;
   --surface: #15151f;
@@ -19,8 +25,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
-  height: 100vh;
-  overflow: hidden;
 }
 
 body::before {
@@ -37,6 +41,7 @@ body::before {
 .screen {
   display: none;
   height: 100vh;
+  width: 100vw;
   position: relative;
   z-index: 1;
 }
@@ -122,20 +127,23 @@ body::before {
   cursor: not-allowed;
 }
 
-/* ===== CHAT SCREEN ===== */
+/* ===== CHAT SCREEN - FIXED LAYOUT ===== */
 #chatScreen {
   flex-direction: row;
+  overflow: hidden;
 }
 
 /* Sidebar */
 #sidebar {
   width: 240px;
+  flex: 0 0 240px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  transition: margin-left 0.3s ease;
+  height: 100vh;
+  overflow: hidden;
+  transition: margin-left 0.3s ease, width 0.3s ease;
 }
 #sidebar.hidden {
   margin-left: -240px;
@@ -147,6 +155,7 @@ body::before {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .online-label {
@@ -170,7 +179,9 @@ body::before {
 #usersList {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 0;
+  min-height: 0;
 }
 
 .user-item {
@@ -204,6 +215,7 @@ body::before {
 
 .user-name {
   flex: 1;
+  min-width: 0;
   font-size: 14px;
   color: var(--text);
   overflow: hidden;
@@ -233,12 +245,15 @@ body::before {
   font-style: italic;
 }
 
-/* Main chat area */
+/* Main chat area - KEY FIX: proper flex constraints */
 .chat-main {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
+  height: 100vh;
   min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 header {
@@ -248,12 +263,17 @@ header {
   padding: 16px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .brand {
   font-size: 20px;
   font-weight: 700;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-info {
@@ -262,6 +282,7 @@ header {
   gap: 8px;
   color: var(--text-dim);
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .online-dot {
@@ -271,6 +292,7 @@ header {
   background: var(--online);
   box-shadow: 0 0 10px var(--online);
   animation: pulse 2s infinite;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {
@@ -281,6 +303,10 @@ header {
 #displayName {
   color: var(--text);
   font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Icon buttons */
@@ -297,6 +323,7 @@ header {
   justify-content: center;
   transition: all 0.2s;
   flex-shrink: 0;
+  padding: 0;
 }
 .icon-btn:hover {
   background: var(--surface-2);
@@ -318,15 +345,18 @@ header {
   width: 32px;
   height: 32px;
   margin-left: 4px;
+  font-size: 14px;
 }
 
 main {
-  flex: 1;
+  flex: 1 1 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 
 main::-webkit-scrollbar,
@@ -369,6 +399,7 @@ main::-webkit-scrollbar-thumb:hover,
   font-size: 15px;
   line-height: 1.4;
   word-wrap: break-word;
+  overflow-wrap: break-word;
   white-space: pre-wrap;
 }
 
@@ -408,11 +439,12 @@ footer {
   padding: 16px 24px;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  position: relative;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .input-wrapper {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -421,6 +453,7 @@ footer {
   border: 1px solid var(--border);
   border-radius: 24px;
   transition: border-color 0.2s;
+  min-width: 0;
 }
 .input-wrapper:focus-within {
   border-color: var(--accent);
@@ -434,10 +467,13 @@ footer {
 .input-wrapper .icon-btn:hover {
   background: rgba(124, 92, 255, 0.15);
   border: none;
+  color: var(--text);
 }
 
 #msgInput {
-  flex: 1;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
   padding: 10px 12px;
   background: transparent;
   border: none;
@@ -460,6 +496,7 @@ footer {
   justify-content: center;
   transition: all 0.2s;
   flex-shrink: 0;
+  padding: 0;
 }
 #sendBtn:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -478,7 +515,7 @@ footer {
   bottom: 90px;
   left: 24px;
   width: 340px;
-  max-width: calc(100vw - 48px);
+  max-width: calc(100% - 48px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -502,6 +539,7 @@ footer {
   padding: 4px;
   gap: 2px;
   overflow-x: auto;
+  flex-shrink: 0;
 }
 
 .emoji-tab {
@@ -540,36 +578,47 @@ footer {
   transition: background 0.1s, transform 0.1s;
   padding: 0;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .emoji-btn:hover {
   background: var(--surface-2);
   transform: scale(1.2);
 }
 
-/* Mobile */
+/* ===== DESKTOP ===== */
+@media (min-width: 701px) {
+  #toggleSidebarBtn { display: none; }
+}
+
+/* ===== MOBILE ===== */
 @media (max-width: 700px) {
   #sidebar {
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
     z-index: 50;
     box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+    width: 260px;
+    flex-basis: 260px;
+  }
+  #sidebar.hidden {
+    margin-left: -260px;
   }
   header { padding: 12px 16px; }
   main { padding: 16px; }
-  footer { padding: 12px 16px; }
+  footer { padding: 12px 16px; gap: 8px; }
   .message { max-width: 85%; }
   .card { padding: 40px 24px; }
   .card h1 { font-size: 32px; }
   .emoji-picker {
     bottom: 80px;
-    left: 16px;
-    right: 16px;
+    left: 12px;
+    right: 12px;
     width: auto;
+    max-width: none;
   }
-}
-
-@media (min-width: 701px) {
-  #toggleSidebarBtn { display: none; }
+  #displayName { max-width: 80px; }
 }
