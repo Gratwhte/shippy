@@ -383,12 +383,39 @@ function subscribeToNewMessages() {
   const roomForChannel = currentRoom;
   console.log('🔵 Subscribing to messages for room:', roomForChannel);
   
-  // Clean up any existing channel first
   if (messagesChannel) {
-    console.log('🧹 Removing existing messages channel');
     supabase.removeChannel(messagesChannel);
     messagesChannel = null;
   }
+  
+  const channelName = `messages-${roomForChannel}-${Date.now()}`;
+  
+  messagesChannel = supabase
+    .channel(channelName)
+    .on('postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages'
+        // NO FILTER - temporarily receiving all messages
+      },
+      (payload) => {
+        console.log('📨 Got message:', payload.new);
+        // Only display messages for current room
+        if (payload.new.room === currentRoom) {
+          addMessage(payload.new, false);
+          scrollToBottom();
+        }
+      }
+    )
+    .subscribe((status, err) => {
+      console.log('🔵 Messages channel status:', status);
+      if (err) console.error('❌ Subscription error details:', JSON.stringify(err));
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Real-time messages ACTIVE');
+      }
+    });
+}
   
   // Use unique channel name with timestamp so we never collide
   const channelName = `messages-${roomForChannel}-${Date.now()}`;
