@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chatter</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Name entry screen -->
+<div id="nameScreen" class="screen active">
+  <div class="card">
+    <h1>💬 chatter</h1>
+    <p class="subtitle">a public chatroom for everyone</p>
+    <input type="text" id="nameInput" placeholder="your name..." maxlength="20" autocomplete="off">
+    <button id="joinBtn">Join Chat →</button>
+  </div>
+</div>
+
+<!-- Chat screen -->
+<div id="chatScreen" class="screen">
+  <header>
+    <div class="brand">💬 chatter</div>
+    <div class="user-info">
+      <span class="online-dot"></span>
+      <span id="displayName"></span>
+      <button id="leaveBtn" title="Leave">✕</button>
+    </div>
+  </header>
+
+  <main id="messages"></main>
+
+  <footer>
+    <input type="text" id="msgInput" placeholder="type a message..." maxlength="500" autocomplete="off">
+    <button id="sendBtn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </footer>
+</div>
+
+<!-- Firebase SDKs (module version) -->
+<script type="module" src="chat.js"></script>
+</body>
+</html>
