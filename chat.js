@@ -419,7 +419,18 @@ function subscribeToNewMessages() {
 
 // ===== PRESENCE =====
 function joinPresence() {
-  presenceChannel = supabase.channel(`online-${currentRoom}`, {
+  // Clean up any existing presence channel first
+  if (presenceChannel) {
+    console.log('🧹 Removing existing presence channel');
+    try { presenceChannel.untrack(); } catch(e) {}
+    supabase.removeChannel(presenceChannel);
+    presenceChannel = null;
+  }
+  
+  // Unique channel name
+  const channelName = `online-${currentRoom}-${Date.now()}`;
+  
+  presenceChannel = supabase.channel(channelName, {
     config: { presence: { key: currentUserId } }
   });
   presenceChannel
@@ -427,6 +438,7 @@ function joinPresence() {
       renderOnlineUsers(presenceChannel.presenceState());
     })
     .subscribe(async (status) => {
+      console.log('🔵 Presence channel status:', status);
       if (status === 'SUBSCRIBED') {
         await presenceChannel.track({
           name: currentUser,
