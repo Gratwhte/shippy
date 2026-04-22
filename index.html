@@ -20,29 +20,62 @@
 
 <!-- Chat screen -->
 <div id="chatScreen" class="screen">
-  <header>
-    <div class="brand">💬 chatter</div>
-    <div class="user-info">
-      <span class="online-dot"></span>
-      <span id="displayName"></span>
-      <button id="leaveBtn" title="Leave">✕</button>
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span class="online-label">ONLINE</span>
+      <span id="onlineCount" class="online-count">0</span>
     </div>
-  </header>
+    <div id="usersList"></div>
+  </aside>
 
-  <main id="messages"></main>
+  <div class="chat-main">
+    <header>
+      <button id="toggleSidebarBtn" class="icon-btn" title="Toggle users">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </button>
+      <div class="brand">💬 chatter</div>
+      <div class="user-info">
+        <span class="online-dot"></span>
+        <span id="displayName"></span>
+        <button id="leaveBtn" class="icon-btn danger" title="Leave">✕</button>
+      </div>
+    </header>
 
-  <footer>
-    <input type="text" id="msgInput" placeholder="type a message..." maxlength="500" autocomplete="off">
-    <button id="sendBtn">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="22" y1="2" x2="11" y2="13"/>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-      </svg>
-    </button>
-  </footer>
+    <main id="messages"></main>
+
+    <footer>
+      <div class="input-wrapper">
+        <button id="emojiBtn" class="icon-btn" title="Emoji">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+            <line x1="9" y1="9" x2="9.01" y2="9"/>
+            <line x1="15" y1="9" x2="15.01" y2="9"/>
+          </svg>
+        </button>
+        <input type="text" id="msgInput" placeholder="type a message..." maxlength="500" autocomplete="off">
+      </div>
+      <button id="sendBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <!-- Emoji picker panel -->
+  <div id="emojiPicker" class="emoji-picker">
+    <div class="emoji-tabs" id="emojiTabs"></div>
+    <div class="emoji-grid" id="emojiGrid"></div>
+  </div>
 </div>
 
-<!-- Firebase SDKs (module version) -->
 <script type="module" src="chat.js"></script>
 </body>
 </html>
