@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin · Chatter</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Admin login -->
+<div id="adminLoginScreen" class="screen active">
+  <div class="card">
+    <div class="logo-wrap">
+      <img src="logo.png" alt="" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo-fallback" style="display:none;">⚙️</div>
+    </div>
+    <h1>admin</h1>
+    <p class="subtitle">enter password to continue</p>
+    <input type="password" id="adminPwInput" placeholder="admin password..." autocomplete="off">
+    <div id="adminLoginError" class="pw-error"></div>
+    <button id="adminLoginBtn">Log in →</button>
+    <a href="index.html" class="admin-link">← back to chat</a>
+  </div>
+</div>
+
+<!-- Admin dashboard -->
+<div id="adminDashboard" class="screen admin-dashboard">
+  <header class="admin-header">
+    <img src="logo.png" alt="" class="brand-logo" onerror="this.style.display='none';">
+    <div class="brand">⚙️ Admin Panel</div>
+    <div class="admin-nav">
+      <a href="index.html" class="text-btn" id="backToChatLink">💬 Back to chat</a>
+      <button id="adminLogoutBtn" class="icon-btn danger" title="Log out">✕</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <section class="admin-section">
+      <h2>Create Room</h2>
+      <p class="muted">Create a room with an optional password for private access.</p>
+      <div class="admin-form">
+        <div class="form-row">
+          <label>Room name</label>
+          <div class="room-input-row">
+            <span class="hash">#</span>
+            <input type="text" id="newRoomName" placeholder="room-name" maxlength="30" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Password <span class="optional">(optional — leave empty for public)</span></label>
+          <input type="text" id="newRoomPassword" placeholder="leave empty for public room" maxlength="50" autocomplete="off" class="plain-input">
+        </div>
+        <button id="createRoomBtn" class="btn-primary">Create Room</button>
+        <div id="createRoomMsg" class="form-msg"></div>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h2>Manage Rooms</h2>
+      <p class="muted">Rooms you've created here. Delete to remove permanently.</p>
+      <div id="adminRoomList" class="admin-room-list">
+        <div class="empty-rooms">Loading...</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>
