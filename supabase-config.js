@@ -9,3 +9,12 @@ export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 // How many messages to load when joining
 export const MAX_MESSAGES = 100;
+
+// ============================================================
+// ADMIN PANEL PASSWORD
+// ============================================================
+// ⚠️ This is client-side only. Anyone inspecting the code can
+// find it. Suitable for demos & friends-only use, NOT for
+// real security. Change it to something you'll remember.
+// ============================================================
+export const ADMIN_PASSWORD = "changeme123";
