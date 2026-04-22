@@ -414,8 +414,9 @@ function subscribeToNewMessages() {
         console.log('✅ Real-time messages ACTIVE');
       }
     });
-}  
-  // Use unique channel name with timestamp so we never collide
+}
+
+// Use unique channel name with timestamp so we never collide
   const channelName = `messages-${roomForChannel}-${Date.now()}`;
   
   messagesChannel = supabase
@@ -440,7 +441,7 @@ function subscribeToNewMessages() {
         console.log('✅ Real-time messages ACTIVE for #' + roomForChannel);
       }
     });
-}
+
 
 // ===== PRESENCE =====
 function joinPresence() {
