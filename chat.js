@@ -42,6 +42,9 @@ const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
 const faviconEl = document.getElementById('favicon');
 
+const homeBtn = document.getElementById('homeBtn');
+
+
 let currentUser = null;
 let currentUserId = null;
 let currentRoom = null;
@@ -112,6 +115,30 @@ function updateTitle() {
 function showScreen(screen) {
   [nameScreen, roomScreen, chatScreen].forEach(s => s.classList.remove('active'));
   screen.classList.add('active');
+}
+
+async function goHome() {
+  stopMessagePolling();
+  stopRoomListPolling();
+
+  currentRoom = null;
+  pendingRoomJoin = null;
+  unreadCount = 0;
+  renderedMessageIds.clear();
+  lastSeenMessageId = 0;
+
+  messagesEl.innerHTML = '';
+  usersList.innerHTML = '';
+  onlineCount.textContent = '0';
+  roomInput.value = '';
+  pwInput.value = '';
+  pwError.textContent = '';
+  hidePasswordPrompt();
+  clearUnread();
+  updateTitle();
+
+  showScreen(nameScreen);
+  nameInput.focus();
 }
 
 // ===== NAME SCREEN =====
@@ -580,6 +607,14 @@ toggleSidebarBtn.addEventListener('click', () => {
 
 if (window.innerWidth <= 700) {
   sidebar.classList.add('hidden');
+}
+
+// === top bar nav ====
+
+if (homeBtn) {
+  homeBtn.addEventListener('click', async () => {
+    await goHome();
+  });
 }
 
 // ===== SESSION RESTORE =====
