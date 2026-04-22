@@ -1,15 +1,10 @@
-// Load Firebase from CDN (no build step needed)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {
-  getDatabase, ref, push, onChildAdded, query, limitToLast, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+// Load Supabase from CDN (no build step)
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-import { firebaseConfig, MAX_MESSAGES } from "./firebase-config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, MAX_MESSAGES } from "./supabase-config.js";
 
-// ===== INIT FIREBASE =====
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const messagesRef = ref(db, 'messages');
+// ===== INIT SUPABASE =====
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===== ELEMENTS =====
 const nameScreen = document.getElementById('nameScreen');
@@ -23,10 +18,9 @@ const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 
 let currentUser = null;
-let listenerAttached = false;
+let realtimeChannel = null;
 
 // ===== NAME ENTRY =====
-// Remember the name if they've been here before
 const savedName = localStorage.getItem('chatter_name');
 if (savedName) nameInput.value = savedName;
 
@@ -40,32 +34,80 @@ nameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click();
 });
 
-joinBtn.addEventListener('click', () => {
+joinBtn.addEventListener('click', async () => {
   const name = nameInput.value.trim();
   if (!name) return;
   currentUser = name;
   localStorage.setItem('chatter_name', name);
-  enterChat();
+  await enterChat();
 });
 
-function enterChat() {
+async function enterChat() {
   nameScreen.classList.remove('active');
   chatScreen.classList.add('active');
   displayName.textContent = currentUser;
   msgInput.focus();
 
-  // Start listening for messages (only once)
-  if (!listenerAttached) {
-    listenForMessages();
-    listenerAttached = true;
-  }
+  // Clear any previous messages (in case user leaves and rejoins)
+  messagesEl.innerHTML = '';
+
+  // 1. Load recent message history
+  await loadRecentMessages();
+
+  // 2. Subscribe to new messages in real time
+  subscribeToNewMessages();
 }
 
 leaveBtn.addEventListener('click', () => {
+  // Unsubscribe from realtime
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
   chatScreen.classList.remove('active');
   nameScreen.classList.add('active');
   nameInput.focus();
 });
+
+// ===== LOAD MESSAGE HISTORY =====
+async function loadRecentMessages() {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(MAX_MESSAGES);
+
+  if (error) {
+    console.error('Failed to load messages:', error);
+    showSystemMessage('⚠️ Could not load messages. Check your Supabase setup.');
+    return;
+  }
+
+  // Reverse so oldest is on top
+  data.reverse().forEach(addMessage);
+  scrollToBottom();
+}
+
+// ===== REALTIME SUBSCRIPTION =====
+function subscribeToNewMessages() {
+  realtimeChannel = supabase
+    .channel('messages-channel')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      (payload) => {
+        addMessage(payload.new);
+        scrollToBottom();
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Connected to realtime');
+      } else if (status === 'CHANNEL_ERROR') {
+        showSystemMessage('⚠️ Realtime connection error.');
+      }
+    });
+}
 
 // ===== SENDING MESSAGES =====
 function updateSendButton() {
@@ -82,41 +124,35 @@ msgInput.addEventListener('keydown', (e) => {
 });
 sendBtn.addEventListener('click', sendMessage);
 
-function sendMessage() {
+async function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || !currentUser) return;
-  push(messagesRef, {
-    name: currentUser,
-    text: text,
-    timestamp: serverTimestamp()
-  }).catch(err => {
-    console.error('Send failed:', err);
-    showSystemMessage('⚠️ Failed to send message. Check console.');
-  });
+
+  // Clear input optimistically
   msgInput.value = '';
   updateSendButton();
   msgInput.focus();
+
+  const { error } = await supabase
+    .from('messages')
+    .insert({ name: currentUser, text });
+
+  if (error) {
+    console.error('Send failed:', error);
+    showSystemMessage('⚠️ Failed to send message.');
+    // Restore text so user doesn't lose it
+    msgInput.value = text;
+    updateSendButton();
+  }
 }
 
-// ===== RECEIVING MESSAGES =====
-function listenForMessages() {
-  const recentQuery = query(messagesRef, limitToLast(MAX_MESSAGES));
-  onChildAdded(recentQuery, (snapshot) => {
-    const msg = snapshot.val();
-    if (!msg) return;
-    addMessage(msg);
-  }, (error) => {
-    console.error('Listen failed:', error);
-    showSystemMessage('⚠️ Connection error. Check Firebase setup.');
-  });
-}
-
+// ===== RENDER MESSAGES =====
 function addMessage(msg) {
   const isSelf = msg.name === currentUser;
   const wrapper = document.createElement('div');
   wrapper.className = `message ${isSelf ? 'self' : 'other'}`;
 
-  const timeStr = msg.timestamp ? formatTime(msg.timestamp) : '';
+  const timeStr = msg.created_at ? formatTime(msg.created_at) : '';
 
   wrapper.innerHTML = `
     ${!isSelf ? `<div class="msg-name">${escapeHtml(msg.name)}</div>` : ''}
@@ -124,8 +160,6 @@ function addMessage(msg) {
     <div class="msg-time">${timeStr}</div>
   `;
   messagesEl.appendChild(wrapper);
-  // Auto-scroll to bottom
-  messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function showSystemMessage(text) {
@@ -133,6 +167,10 @@ function showSystemMessage(text) {
   el.className = 'system-msg';
   el.textContent = text;
   messagesEl.appendChild(el);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -143,7 +181,6 @@ function formatTime(ts) {
   return `${h}:${m}`;
 }
 
-// Prevents XSS / HTML injection in messages
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
