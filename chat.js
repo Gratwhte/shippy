@@ -48,7 +48,6 @@ let currentRoom = null;
 let messagesChannel = null;
 let presenceChannel = null;
 let roomListChannel = null;
-let knownRooms = []; // [{name, password}]
 let pendingRoomJoin = null;
 let unreadCount = 0;
 let windowFocused = true;
@@ -176,7 +175,6 @@ joinRoomBtn.addEventListener('click', () => {
   attemptJoinRoom(clean);
 });
 
-// Load admin-created rooms AND rooms from recent message activity
 async function loadRoomList() {
   roomList.innerHTML = '<div class="empty-rooms">Loading rooms...</div>';
 
@@ -191,7 +189,6 @@ async function loadRoomList() {
   const adminRooms = roomsRes.data || [];
   const adminRoomNames = new Set(adminRooms.map(r => r.name));
 
-  // Find organic rooms (from messages) not already admin-defined
   const organicRooms = [];
   const seen = new Set();
   for (const row of messagesRes.data || []) {
@@ -201,7 +198,6 @@ async function loadRoomList() {
     }
   }
 
-  // Build combined list: admin rooms first, then organic, then general fallback
   const combined = [];
   for (const r of adminRooms) combined.push({ name: r.name, password: r.password, isAdmin: true });
   for (const r of organicRooms) combined.push({ name: r, password: null, isAdmin: false });
@@ -210,7 +206,6 @@ async function loadRoomList() {
     combined.push({ name: 'general', password: null, isAdmin: false });
   }
 
-  knownRooms = combined;
   renderRoomList(combined);
 }
 
@@ -249,7 +244,10 @@ function subscribeToRoomList() {
       { event: '*', schema: 'public', table: 'rooms' },
       () => loadRoomList()
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log('🔵 Room list channel status:', status);
+      if (err) console.error('❌ Room list subscription error:', err);
+    });
 }
 
 function cleanupRoomListChannel() {
@@ -259,9 +257,8 @@ function cleanupRoomListChannel() {
   }
 }
 
-// ===== PASSWORD-PROTECTED ROOM HANDLING =====
+// ===== PASSWORD PROTECTED ROOMS =====
 async function attemptJoinRoom(roomName) {
-  // Check if this room has a password in the rooms table
   const { data, error } = await supabase
     .from('rooms')
     .select('password')
@@ -274,10 +271,8 @@ async function attemptJoinRoom(roomName) {
 
   const password = data?.password;
   if (password && password.length > 0) {
-    // Room is protected — show password prompt
     showPasswordPrompt(roomName, password);
   } else {
-    // Public room — join directly
     enterRoom(roomName);
   }
 }
@@ -316,7 +311,28 @@ pwInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hidePasswordPrompt();
 });
 
-// ===== ENTER CHAT ROOM =====
+// ===== ROOM ENTRY / EXIT =====
+async function leaveRoomChannelsOnly() {
+  if (messagesChannel) {
+    try {
+      await supabase.removeChannel(messagesChannel);
+    } catch (e) {
+      console.warn('Could not remove messages channel:', e);
+    }
+    messagesChannel = null;
+  }
+
+  if (presenceChannel) {
+    try { await presenceChannel.untrack(); } catch (e) {}
+    try {
+      await supabase.removeChannel(presenceChannel);
+    } catch (e) {
+      console.warn('Could not remove presence channel:', e);
+    }
+    presenceChannel = null;
+  }
+}
+
 async function enterRoom(room) {
   currentRoom = room;
   cleanupRoomListChannel();
@@ -330,9 +346,10 @@ async function enterRoom(room) {
   showScreen(chatScreen);
   msgInput.focus();
 
+  await leaveRoomChannelsOnly();
   await loadRecentMessages();
-  subscribeToNewMessages();
-  joinPresence();
+  await subscribeToNewMessages();
+  await joinPresence();
 }
 
 leaveBtn.addEventListener('click', async () => {
@@ -341,15 +358,7 @@ leaveBtn.addEventListener('click', async () => {
 });
 
 async function leaveRoom() {
-  if (messagesChannel) {
-    await supabase.removeChannel(messagesChannel);
-    messagesChannel = null;
-  }
-  if (presenceChannel) {
-    try { await presenceChannel.untrack(); } catch(e) {}
-    await supabase.removeChannel(presenceChannel);
-    presenceChannel = null;
-  }
+  await leaveRoomChannelsOnly();
   usersList.innerHTML = '';
   onlineCount.textContent = '0';
   currentRoom = null;
@@ -370,109 +379,89 @@ async function loadRecentMessages() {
     .eq('room', currentRoom)
     .order('created_at', { ascending: false })
     .limit(MAX_MESSAGES);
+
   if (error) {
     console.error('Load messages error:', error);
     showSystemMessage('⚠️ ' + error.message);
     return;
   }
+
   if (data) data.reverse().forEach(m => addMessage(m, true));
   scrollToBottom();
 }
 
-function subscribeToNewMessages() {
+async function subscribeToNewMessages() {
   const roomForChannel = currentRoom;
   console.log('🔵 Subscribing to messages for room:', roomForChannel);
-  
+
   if (messagesChannel) {
-    supabase.removeChannel(messagesChannel);
+    console.log('🧹 Removing existing messages channel');
+    await supabase.removeChannel(messagesChannel);
     messagesChannel = null;
   }
-  
-  const channelName = `messages-${Date.now()}`;
-  
+
   messagesChannel = supabase
-    .channel(channelName)
-    .on('postgres_changes',
+    .channel(`messages-room-${roomForChannel}`)
+    .on(
+      'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'messages'
-        // Filter removed — we'll filter client-side
       },
       (payload) => {
-        console.log('📨 Got message:', payload.new);
-        if (payload.new.room === currentRoom) {
-          addMessage(payload.new, false);
-          scrollToBottom();
-        }
-      }
-    )
-    .subscribe((status, err) => {
-      console.log('🔵 Messages channel status:', status);
-      if (err) console.error('❌ Error details:', JSON.stringify(err, null, 2));
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Real-time messages ACTIVE');
-      }
-    });
-}
-
-// Use unique channel name with timestamp so we never collide
-  const channelName = `messages-${roomForChannel}-${Date.now()}`;
-  
-  messagesChannel = supabase
-    .channel(channelName)
-    .on('postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `room=eq.${roomForChannel}`
-      },
-      (payload) => {
-        console.log('📨 Real-time message received:', payload.new);
-        addMessage(payload.new, false);
+        const msg = payload.new;
+        if (msg.room !== currentRoom) return;
+        console.log('📨 Real-time message received:', msg);
+        addMessage(msg, false);
         scrollToBottom();
       }
     )
     .subscribe((status, err) => {
       console.log('🔵 Messages channel status:', status);
-      if (err) console.error('❌ Subscription error details:', err);
+      if (err) console.error('❌ Messages subscription error:', err);
       if (status === 'SUBSCRIBED') {
         console.log('✅ Real-time messages ACTIVE for #' + roomForChannel);
       }
     });
 }
 
-
 // ===== PRESENCE =====
-function joinPresence() {
-  // Clean up any existing presence channel first
+async function joinPresence() {
   if (presenceChannel) {
     console.log('🧹 Removing existing presence channel');
-    try { presenceChannel.untrack(); } catch(e) {}
-    supabase.removeChannel(presenceChannel);
+    try { await presenceChannel.untrack(); } catch (e) {}
+    await supabase.removeChannel(presenceChannel);
     presenceChannel = null;
   }
-  
-  // Unique channel name
-  const channelName = `online-${currentRoom}-${Date.now()}`;
-  
-  presenceChannel = supabase.channel(channelName, {
-    config: { presence: { key: currentUserId } }
+
+  presenceChannel = supabase.channel(`presence-room-${currentRoom}`, {
+    config: {
+      presence: { key: currentUserId }
+    }
   });
+
   presenceChannel
     .on('presence', { event: 'sync' }, () => {
+      console.log('👥 Presence sync');
       renderOnlineUsers(presenceChannel.presenceState());
     })
-    .subscribe(async (status) => {
+    .subscribe(async (status, err) => {
       console.log('🔵 Presence channel status:', status);
+      if (err) console.error('❌ Presence subscription error:', err);
+
       if (status === 'SUBSCRIBED') {
-        await presenceChannel.track({
-          name: currentUser,
-          user_id: currentUserId,
-          room: currentRoom,
-          joined_at: new Date().toISOString()
-        });
+        try {
+          await presenceChannel.track({
+            name: currentUser,
+            user_id: currentUserId,
+            room: currentRoom,
+            joined_at: new Date().toISOString()
+          });
+          console.log('✅ Presence ACTIVE for #' + currentRoom);
+        } catch (e) {
+          console.error('❌ Presence track failed:', e);
+        }
       }
     });
 }
@@ -483,16 +472,20 @@ function renderOnlineUsers(state) {
     const entries = state[key];
     if (entries && entries.length > 0) users.push(entries[0]);
   }
+
   users.sort((a, b) => {
     if (a.user_id === currentUserId) return -1;
     if (b.user_id === currentUserId) return 1;
     return (a.name || '').localeCompare(b.name || '');
   });
+
   onlineCount.textContent = users.length;
+
   if (users.length === 0) {
     usersList.innerHTML = '<div class="empty-users">No one else here yet</div>';
     return;
   }
+
   usersList.innerHTML = users.map(u => {
     const isSelf = u.user_id === currentUserId;
     return `<div class="user-item ${isSelf ? 'is-self' : ''}"><div class="user-avatar" style="background: ${colorFromName(u.name || '?')}">${escapeHtml((u.name || '?')[0])}</div><div class="user-name">${escapeHtml(u.name || 'Anonymous')}</div><div class="user-dot"></div></div>`;
@@ -523,15 +516,18 @@ sendBtn.addEventListener('click', sendMessage);
 async function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || !currentUser || !currentRoom) return;
+
   msgInput.value = '';
   updateSendButton();
   msgInput.focus();
   closeEmojiPicker();
+
   const { error } = await supabase.from('messages').insert({
     name: currentUser,
     text: text,
     room: currentRoom
   });
+
   if (error) {
     console.error('Send failed:', error);
     showSystemMessage('⚠️ ' + error.message);
@@ -545,10 +541,10 @@ function addMessage(msg, isHistorical) {
   const wrapper = document.createElement('div');
   wrapper.className = `message ${isSelf ? 'self' : 'other'}`;
   const timeStr = msg.created_at ? formatTime(msg.created_at) : '';
+
   wrapper.innerHTML = `${!isSelf ? `<div class="msg-name">${escapeHtml(msg.name)}</div>` : ''}<div class="msg-bubble">${escapeHtml(msg.text)}</div><div class="msg-time">${timeStr}</div>`;
   messagesEl.appendChild(wrapper);
 
-  // Track unread: not your own, not historical, window not focused
   if (!isHistorical && !isSelf && !windowFocused) {
     incrementUnread();
   }
@@ -635,6 +631,7 @@ document.addEventListener('click', (e) => {
 
 buildEmojiPicker();
 
+// ===== SIDEBAR =====
 toggleSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('hidden');
 });
@@ -643,8 +640,7 @@ if (window.innerWidth <= 700) {
   sidebar.classList.add('hidden');
 }
 
-// ===== RESUME SESSION AFTER ADMIN VISIT =====
-// If we return from admin.html with saved state, restore it
+// ===== SESSION RESTORE =====
 const savedSession = sessionStorage.getItem('chatter_session');
 if (savedSession) {
   try {
@@ -655,18 +651,16 @@ if (savedSession) {
       currentUserId = s.userId;
       nameInput.value = s.name;
       if (s.room) {
-        // Rejoin their room automatically
         enterRoom(s.room);
       } else {
         goToRoomSelect();
       }
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('Failed to restore session:', e);
   }
 }
 
-// When user clicks admin link while chatting, save session
 document.querySelectorAll('a.admin-link, a#backToChatLink').forEach(link => {
   link.addEventListener('click', () => {
     if (currentUser) {
