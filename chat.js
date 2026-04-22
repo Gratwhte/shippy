@@ -441,6 +441,7 @@ function subscribeToNewMessages() {
         console.log('✅ Real-time messages ACTIVE for #' + roomForChannel);
       }
     });
+}
 
 
 // ===== PRESENCE =====
