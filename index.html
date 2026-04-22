@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chatter</title>
+<link id="favicon" rel="icon" type="image/png" href="imgs/chatter-logo.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,10 +12,60 @@
 <!-- Name entry screen -->
 <div id="nameScreen" class="screen active">
   <div class="card">
-    <h1>💬 chatter</h1>
+    <div class="logo-wrap">
+      <img src="imgs/chatter-logo.png" alt="Chatter logo" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo-fallback" style="display:none;">💬</div>
+    </div>
+    <h1>chatter</h1>
     <p class="subtitle">a public chatroom for everyone</p>
     <input type="text" id="nameInput" placeholder="your name..." maxlength="20" autocomplete="off">
-    <button id="joinBtn">Join Chat →</button>
+    <button id="nameNextBtn">Next →</button>
+    <a href="admin.html" class="admin-link">⚙️ admin</a>
+  </div>
+</div>
+
+<!-- Room selection screen -->
+<div id="roomScreen" class="screen">
+  <div class="card card-wide">
+    <div class="room-header">
+      <h2>👋 hey <span id="roomGreetName"></span></h2>
+      <button id="backToNameBtn" class="text-btn">← change name</button>
+    </div>
+    <p class="subtitle">pick a room or create your own</p>
+
+    <div class="room-list-section">
+      <div class="section-label">ROOMS</div>
+      <div id="roomList" class="room-list">
+        <div class="empty-rooms">Loading rooms...</div>
+      </div>
+    </div>
+
+    <div class="divider"><span>OR</span></div>
+
+    <div class="create-room">
+      <div class="section-label">QUICK JOIN</div>
+      <div class="room-input-row">
+        <span class="hash">#</span>
+        <input type="text" id="roomInput" placeholder="room-name" maxlength="30" autocomplete="off">
+        <button id="joinRoomBtn">Join</button>
+      </div>
+      <p class="hint">letters, numbers, hyphens. no password = public room.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Password prompt overlay -->
+<div id="passwordOverlay" class="overlay">
+  <div class="overlay-card">
+    <div class="lock-icon">🔒</div>
+    <h3>Password required</h3>
+    <p>Room <span id="pwRoomName"></span> is protected.</p>
+    <input type="password" id="pwInput" placeholder="enter password..." autocomplete="off">
+    <div id="pwError" class="pw-error"></div>
+    <div class="overlay-buttons">
+      <button id="pwCancelBtn" class="btn-secondary">Cancel</button>
+      <button id="pwSubmitBtn" class="btn-primary">Enter</button>
+    </div>
   </div>
 </div>
 
@@ -38,11 +89,14 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
       </button>
-      <div class="brand">💬 chatter</div>
+      <img src="imgs/chatter-logo.png" alt="" class="brand-logo" onerror="this.style.display='none';">
+      <div class="brand">
+        <span class="room-hash">#</span><span id="currentRoom">general</span>
+      </div>
       <div class="user-info">
         <span class="online-dot"></span>
         <span id="displayName"></span>
-        <button id="leaveBtn" class="icon-btn danger" title="Leave">✕</button>
+        <button id="leaveBtn" class="icon-btn danger" title="Leave room">✕</button>
       </div>
     </header>
 
@@ -69,7 +123,6 @@
     </footer>
   </div>
 
-  <!-- Emoji picker panel -->
   <div id="emojiPicker" class="emoji-picker">
     <div class="emoji-tabs" id="emojiTabs"></div>
     <div class="emoji-grid" id="emojiGrid"></div>
