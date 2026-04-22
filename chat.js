@@ -381,6 +381,8 @@ async function loadRecentMessages() {
 
 function subscribeToNewMessages() {
   const roomForChannel = currentRoom;
+  console.log('🔵 Subscribing to messages for room:', roomForChannel);
+  
   messagesChannel = supabase
     .channel(`messages-${roomForChannel}`)
     .on('postgres_changes',
@@ -391,11 +393,18 @@ function subscribeToNewMessages() {
         filter: `room=eq.${roomForChannel}`
       },
       (payload) => {
+        console.log('📨 Real-time message received:', payload.new);
         addMessage(payload.new, false);
         scrollToBottom();
       }
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log('🔵 Messages channel status:', status);
+      if (err) console.error('❌ Subscription error:', err);
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Real-time messages ACTIVE for #' + roomForChannel);
+      }
+    });
 }
 
 // ===== PRESENCE =====
