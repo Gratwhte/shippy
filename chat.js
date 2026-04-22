@@ -40,17 +40,15 @@ const usersList = document.getElementById('usersList');
 const onlineCount = document.getElementById('onlineCount');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
-const faviconEl.href = unread ? 'imgs/cheddar-unread.png' : 'imgs/cheddar.png';
+const faviconEl = document.getElementById('favicon');
 
 let currentUser = null;
 let currentUserId = null;
 let currentRoom = null;
-let roomListChannel = null;
 let pendingRoomJoin = null;
 let unreadCount = 0;
 let windowFocused = true;
 
-// polling state
 let messagePollTimer = null;
 let roomListPollTimer = null;
 let lastSeenMessageId = 0;
@@ -89,7 +87,7 @@ document.addEventListener('visibilitychange', () => {
 
 function setFavicon(unread) {
   if (!faviconEl) return;
-  faviconEl.href = unread ? 'favicon-unread.png' : 'imgs/chatter-logo-unread.png';
+  faviconEl.href = unread ? 'imgs/cheddar-unread.png' : 'imgs/cheddar.png';
 }
 
 function incrementUnread() {
@@ -365,8 +363,10 @@ async function loadRecentMessages() {
 
   const ordered = (data || []).reverse();
   for (const m of ordered) {
-    addMessage(m, true);
-    renderedMessageIds.add(m.id);
+    if (!renderedMessageIds.has(m.id)) {
+      addMessage(m, true);
+      renderedMessageIds.add(m.id);
+    }
     if (m.id > lastSeenMessageId) lastSeenMessageId = m.id;
   }
   scrollToBottom();
@@ -470,7 +470,6 @@ async function sendMessage() {
     return;
   }
 
-  // optimistic immediate render for sender
   if (data && !renderedMessageIds.has(data.id)) {
     addMessage(data, false);
     renderedMessageIds.add(data.id);
@@ -480,8 +479,6 @@ async function sendMessage() {
 }
 
 function addMessage(msg, isHistorical) {
-  if (!msg || renderedMessageIds.has(msg.id)) return;
-
   const isSelf = msg.name === currentUser;
   const wrapper = document.createElement('div');
   wrapper.className = `message ${isSelf ? 'self' : 'other'}`;
