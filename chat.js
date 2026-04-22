@@ -45,12 +45,16 @@ const faviconEl = document.getElementById('favicon');
 let currentUser = null;
 let currentUserId = null;
 let currentRoom = null;
-let messagesChannel = null;
-let presenceChannel = null;
 let roomListChannel = null;
 let pendingRoomJoin = null;
 let unreadCount = 0;
 let windowFocused = true;
+
+// polling state
+let messagePollTimer = null;
+let roomListPollTimer = null;
+let lastSeenMessageId = 0;
+let renderedMessageIds = new Set();
 
 // ===== EMOJIS =====
 const EMOJI_CATEGORIES = {
@@ -142,12 +146,12 @@ function goToRoomSelect() {
   updateJoinRoomBtn();
   showScreen(roomScreen);
   loadRoomList();
-  subscribeToRoomList();
+  startRoomListPolling();
   roomInput.focus();
 }
 
 backToNameBtn.addEventListener('click', () => {
-  cleanupRoomListChannel();
+  stopRoomListPolling();
   showScreen(nameScreen);
   nameInput.focus();
 });
@@ -232,32 +236,21 @@ function renderRoomList(rooms) {
   });
 }
 
-function subscribeToRoomList() {
-  cleanupRoomListChannel();
-  roomListChannel = supabase
-    .channel('room-list-channel')
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'messages' },
-      () => loadRoomList()
-    )
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'rooms' },
-      () => loadRoomList()
-    )
-    .subscribe((status, err) => {
-      console.log('🔵 Room list channel status:', status);
-      if (err) console.error('❌ Room list subscription error:', err);
-    });
+function startRoomListPolling() {
+  stopRoomListPolling();
+  roomListPollTimer = setInterval(() => {
+    if (roomScreen.classList.contains('active')) loadRoomList();
+  }, 3000);
 }
 
-function cleanupRoomListChannel() {
-  if (roomListChannel) {
-    supabase.removeChannel(roomListChannel);
-    roomListChannel = null;
+function stopRoomListPolling() {
+  if (roomListPollTimer) {
+    clearInterval(roomListPollTimer);
+    roomListPollTimer = null;
   }
 }
 
-// ===== PASSWORD PROTECTED ROOMS =====
+// ===== PASSWORD ROOMS =====
 async function attemptJoinRoom(roomName) {
   const { data, error } = await supabase
     .from('rooms')
@@ -265,9 +258,7 @@ async function attemptJoinRoom(roomName) {
     .eq('name', roomName)
     .maybeSingle();
 
-  if (error) {
-    console.error('Room lookup error:', error);
-  }
+  if (error) console.error('Room lookup error:', error);
 
   const password = data?.password;
   if (password && password.length > 0) {
@@ -312,44 +303,31 @@ pwInput.addEventListener('keydown', (e) => {
 });
 
 // ===== ROOM ENTRY / EXIT =====
-async function leaveRoomChannelsOnly() {
-  if (messagesChannel) {
-    try {
-      await supabase.removeChannel(messagesChannel);
-    } catch (e) {
-      console.warn('Could not remove messages channel:', e);
-    }
-    messagesChannel = null;
-  }
-
-  if (presenceChannel) {
-    try { await presenceChannel.untrack(); } catch (e) {}
-    try {
-      await supabase.removeChannel(presenceChannel);
-    } catch (e) {
-      console.warn('Could not remove presence channel:', e);
-    }
-    presenceChannel = null;
+function stopMessagePolling() {
+  if (messagePollTimer) {
+    clearInterval(messagePollTimer);
+    messagePollTimer = null;
   }
 }
 
 async function enterRoom(room) {
   currentRoom = room;
-  cleanupRoomListChannel();
+  stopRoomListPolling();
 
   currentRoomEl.textContent = room;
   displayName.textContent = currentUser;
   messagesEl.innerHTML = '';
+  renderedMessageIds.clear();
+  lastSeenMessageId = 0;
   clearUnread();
   updateTitle();
 
   showScreen(chatScreen);
   msgInput.focus();
 
-  await leaveRoomChannelsOnly();
   await loadRecentMessages();
-  await subscribeToNewMessages();
-  await joinPresence();
+  renderFakePresence();
+  startMessagePolling();
 }
 
 leaveBtn.addEventListener('click', async () => {
@@ -358,7 +336,7 @@ leaveBtn.addEventListener('click', async () => {
 });
 
 async function leaveRoom() {
-  await leaveRoomChannelsOnly();
+  stopMessagePolling();
   usersList.innerHTML = '';
   onlineCount.textContent = '0';
   currentRoom = null;
@@ -366,9 +344,8 @@ async function leaveRoom() {
 }
 
 window.addEventListener('beforeunload', () => {
-  if (presenceChannel) {
-    try { presenceChannel.untrack(); } catch(e) {}
-  }
+  stopMessagePolling();
+  stopRoomListPolling();
 });
 
 // ===== MESSAGES =====
@@ -386,110 +363,63 @@ async function loadRecentMessages() {
     return;
   }
 
-  if (data) data.reverse().forEach(m => addMessage(m, true));
+  const ordered = (data || []).reverse();
+  for (const m of ordered) {
+    addMessage(m, true);
+    renderedMessageIds.add(m.id);
+    if (m.id > lastSeenMessageId) lastSeenMessageId = m.id;
+  }
   scrollToBottom();
 }
 
-async function subscribeToNewMessages() {
-  const roomForChannel = currentRoom;
-  console.log('🔵 Subscribing to messages for room:', roomForChannel);
+function startMessagePolling() {
+  stopMessagePolling();
+  console.log('🟢 Starting message polling for room:', currentRoom);
 
-  if (messagesChannel) {
-    console.log('🧹 Removing existing messages channel');
-    await supabase.removeChannel(messagesChannel);
-    messagesChannel = null;
-  }
+  messagePollTimer = setInterval(async () => {
+    if (!currentRoom || !chatScreen.classList.contains('active')) return;
 
-  messagesChannel = supabase
-    .channel(`messages-room-${roomForChannel}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages'
-      },
-      (payload) => {
-        const msg = payload.new;
-        if (msg.room !== currentRoom) return;
-        console.log('📨 Real-time message received:', msg);
-        addMessage(msg, false);
-        scrollToBottom();
-      }
-    )
-    .subscribe((status, err) => {
-      console.log('🔵 Messages channel status:', status);
-      if (err) console.error('❌ Messages subscription error:', err);
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Real-time messages ACTIVE for #' + roomForChannel);
-      }
-    });
-}
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('room', currentRoom)
+      .gt('id', lastSeenMessageId)
+      .order('id', { ascending: true })
+      .limit(50);
 
-// ===== PRESENCE =====
-async function joinPresence() {
-  if (presenceChannel) {
-    console.log('🧹 Removing existing presence channel');
-    try { await presenceChannel.untrack(); } catch (e) {}
-    await supabase.removeChannel(presenceChannel);
-    presenceChannel = null;
-  }
-
-  presenceChannel = supabase.channel(`presence-room-${currentRoom}`, {
-    config: {
-      presence: { key: currentUserId }
+    if (error) {
+      console.error('Polling error:', error);
+      return;
     }
-  });
 
-  presenceChannel
-    .on('presence', { event: 'sync' }, () => {
-      console.log('👥 Presence sync');
-      renderOnlineUsers(presenceChannel.presenceState());
-    })
-    .subscribe(async (status, err) => {
-      console.log('🔵 Presence channel status:', status);
-      if (err) console.error('❌ Presence subscription error:', err);
+    for (const msg of data || []) {
+      if (renderedMessageIds.has(msg.id)) continue;
+      addMessage(msg, false);
+      renderedMessageIds.add(msg.id);
+      if (msg.id > lastSeenMessageId) lastSeenMessageId = msg.id;
+    }
 
-      if (status === 'SUBSCRIBED') {
-        try {
-          await presenceChannel.track({
-            name: currentUser,
-            user_id: currentUserId,
-            room: currentRoom,
-            joined_at: new Date().toISOString()
-          });
-          console.log('✅ Presence ACTIVE for #' + currentRoom);
-        } catch (e) {
-          console.error('❌ Presence track failed:', e);
-        }
-      }
-    });
+    if ((data || []).length > 0) {
+      scrollToBottom();
+    }
+  }, 1500);
 }
 
-function renderOnlineUsers(state) {
-  const users = [];
-  for (const key in state) {
-    const entries = state[key];
-    if (entries && entries.length > 0) users.push(entries[0]);
-  }
-
-  users.sort((a, b) => {
-    if (a.user_id === currentUserId) return -1;
-    if (b.user_id === currentUserId) return 1;
-    return (a.name || '').localeCompare(b.name || '');
-  });
-
-  onlineCount.textContent = users.length;
-
-  if (users.length === 0) {
-    usersList.innerHTML = '<div class="empty-users">No one else here yet</div>';
-    return;
-  }
-
-  usersList.innerHTML = users.map(u => {
-    const isSelf = u.user_id === currentUserId;
-    return `<div class="user-item ${isSelf ? 'is-self' : ''}"><div class="user-avatar" style="background: ${colorFromName(u.name || '?')}">${escapeHtml((u.name || '?')[0])}</div><div class="user-name">${escapeHtml(u.name || 'Anonymous')}</div><div class="user-dot"></div></div>`;
-  }).join('');
+// ===== SIMPLE ONLINE PLACEHOLDER =====
+function renderFakePresence() {
+  onlineCount.textContent = '1';
+  usersList.innerHTML = `
+    <div class="user-item is-self">
+      <div class="user-avatar" style="background: ${colorFromName(currentUser || '?')}">
+        ${escapeHtml((currentUser || '?')[0])}
+      </div>
+      <div class="user-name">${escapeHtml(currentUser || 'You')}</div>
+      <div class="user-dot"></div>
+    </div>
+    <div class="empty-users" style="padding-top:16px;">
+      Live online list temporarily disabled while realtime is being fixed
+    </div>
+  `;
 }
 
 function colorFromName(name) {
@@ -522,21 +452,36 @@ async function sendMessage() {
   msgInput.focus();
   closeEmojiPicker();
 
-  const { error } = await supabase.from('messages').insert({
-    name: currentUser,
-    text: text,
-    room: currentRoom
-  });
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      name: currentUser,
+      text,
+      room: currentRoom
+    })
+    .select()
+    .single();
 
   if (error) {
     console.error('Send failed:', error);
     showSystemMessage('⚠️ ' + error.message);
     msgInput.value = text;
     updateSendButton();
+    return;
+  }
+
+  // optimistic immediate render for sender
+  if (data && !renderedMessageIds.has(data.id)) {
+    addMessage(data, false);
+    renderedMessageIds.add(data.id);
+    if (data.id > lastSeenMessageId) lastSeenMessageId = data.id;
+    scrollToBottom();
   }
 }
 
 function addMessage(msg, isHistorical) {
+  if (!msg || renderedMessageIds.has(msg.id)) return;
+
   const isSelf = msg.name === currentUser;
   const wrapper = document.createElement('div');
   wrapper.className = `message ${isSelf ? 'self' : 'other'}`;
