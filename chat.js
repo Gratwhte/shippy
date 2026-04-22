@@ -388,7 +388,7 @@ function subscribeToNewMessages() {
     messagesChannel = null;
   }
   
-  const channelName = `messages-${roomForChannel}-${Date.now()}`;
+  const channelName = `messages-${Date.now()}`;
   
   messagesChannel = supabase
     .channel(channelName)
@@ -397,11 +397,10 @@ function subscribeToNewMessages() {
         event: 'INSERT',
         schema: 'public',
         table: 'messages'
-        // NO FILTER - temporarily receiving all messages
+        // Filter removed — we'll filter client-side
       },
       (payload) => {
         console.log('📨 Got message:', payload.new);
-        // Only display messages for current room
         if (payload.new.room === currentRoom) {
           addMessage(payload.new, false);
           scrollToBottom();
@@ -410,13 +409,12 @@ function subscribeToNewMessages() {
     )
     .subscribe((status, err) => {
       console.log('🔵 Messages channel status:', status);
-      if (err) console.error('❌ Subscription error details:', JSON.stringify(err));
+      if (err) console.error('❌ Error details:', JSON.stringify(err, null, 2));
       if (status === 'SUBSCRIBED') {
         console.log('✅ Real-time messages ACTIVE');
       }
     });
-}
-  
+}  
   // Use unique channel name with timestamp so we never collide
   const channelName = `messages-${roomForChannel}-${Date.now()}`;
   
