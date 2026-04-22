@@ -5,11 +5,29 @@ console.log('🔵 chat.js loaded');
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ===== ELEMENTS =====
 const nameScreen = document.getElementById('nameScreen');
+const roomScreen = document.getElementById('roomScreen');
 const chatScreen = document.getElementById('chatScreen');
+
 const nameInput = document.getElementById('nameInput');
-const joinBtn = document.getElementById('joinBtn');
+const nameNextBtn = document.getElementById('nameNextBtn');
+
+const roomGreetName = document.getElementById('roomGreetName');
+const backToNameBtn = document.getElementById('backToNameBtn');
+const roomList = document.getElementById('roomList');
+const roomInput = document.getElementById('roomInput');
+const joinRoomBtn = document.getElementById('joinRoomBtn');
+
+const passwordOverlay = document.getElementById('passwordOverlay');
+const pwRoomName = document.getElementById('pwRoomName');
+const pwInput = document.getElementById('pwInput');
+const pwError = document.getElementById('pwError');
+const pwSubmitBtn = document.getElementById('pwSubmitBtn');
+const pwCancelBtn = document.getElementById('pwCancelBtn');
+
 const displayName = document.getElementById('displayName');
+const currentRoomEl = document.getElementById('currentRoom');
 const leaveBtn = document.getElementById('leaveBtn');
 const messagesEl = document.getElementById('messages');
 const msgInput = document.getElementById('msgInput');
@@ -22,12 +40,20 @@ const usersList = document.getElementById('usersList');
 const onlineCount = document.getElementById('onlineCount');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+const faviconEl = document.getElementById('favicon');
 
 let currentUser = null;
 let currentUserId = null;
+let currentRoom = null;
 let messagesChannel = null;
 let presenceChannel = null;
+let roomListChannel = null;
+let knownRooms = []; // [{name, password}]
+let pendingRoomJoin = null;
+let unreadCount = 0;
+let windowFocused = true;
 
+// ===== EMOJIS =====
 const EMOJI_CATEGORIES = {
   '😀': { name: 'Smileys', emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','😐','😑','😶','😏','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🥵','🥶','🥴','😵','🤯','🥳','😎','🤓','🧐','😕','😟','🙁','😮','😯','😲','😳','🥺','😨','😰','😢','😭','😱','😖','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👻','👽','👾','🤖'] },
   '👍': { name: 'Gestures', emojis: ['👋','🤚','✋','🖖','👌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤝','🙏','💪','👀','👂','👃','👄','💋'] },
@@ -41,49 +67,280 @@ const EMOJI_CATEGORIES = {
   '🌈': { name: 'Symbols', emojis: ['✅','❌','⭕','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🔺','🔻','🔶','🔷','💯','🔝','🆒','🆕','🆙','🆓','🆗','🆘','❗','❓','❕','❔','‼️','⁉️','💤','💢','💬','💭','♨️','🌈','☀️','⛅','🌧️','⛈️','❄️','☃️','⛄','💨','💧','💦','☔','🌊'] }
 };
 
-const savedName = localStorage.getItem('chatter_name');
-if (savedName) nameInput.value = savedName;
-
-function updateJoinButton() {
-  joinBtn.disabled = nameInput.value.trim().length === 0;
-}
-nameInput.addEventListener('input', updateJoinButton);
-updateJoinButton();
-
-nameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click();
+// ===== FAVICON / UNREAD =====
+window.addEventListener('focus', () => {
+  windowFocused = true;
+  clearUnread();
 });
-
-joinBtn.addEventListener('click', async () => {
-  const name = nameInput.value.trim();
-  if (!name) return;
-  joinBtn.disabled = true;
-  joinBtn.textContent = 'Joining...';
-  try {
-    currentUser = name;
-    currentUserId = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
-    localStorage.setItem('chatter_name', name);
-    await enterChat();
-  } catch (err) {
-    console.error('Join failed:', err);
-    alert('Join failed: ' + err.message);
-    joinBtn.disabled = false;
-    joinBtn.textContent = 'Join Chat →';
+window.addEventListener('blur', () => {
+  windowFocused = false;
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    windowFocused = true;
+    clearUnread();
+  } else {
+    windowFocused = false;
   }
 });
 
-async function enterChat() {
-  nameScreen.classList.remove('active');
-  chatScreen.classList.add('active');
+function setFavicon(unread) {
+  if (!faviconEl) return;
+  faviconEl.href = unread ? 'favicon-unread.png' : 'favicon.png';
+}
+
+function incrementUnread() {
+  unreadCount++;
+  setFavicon(true);
+  updateTitle();
+}
+
+function clearUnread() {
+  if (unreadCount === 0) return;
+  unreadCount = 0;
+  setFavicon(false);
+  updateTitle();
+}
+
+function updateTitle() {
+  const base = currentRoom ? `#${currentRoom} · Chatter` : 'Chatter';
+  document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
+}
+
+// ===== SCREEN NAVIGATION =====
+function showScreen(screen) {
+  [nameScreen, roomScreen, chatScreen].forEach(s => s.classList.remove('active'));
+  screen.classList.add('active');
+}
+
+// ===== NAME SCREEN =====
+const savedName = localStorage.getItem('chatter_name');
+if (savedName) nameInput.value = savedName;
+
+function updateNameNextBtn() {
+  nameNextBtn.disabled = nameInput.value.trim().length === 0;
+}
+nameInput.addEventListener('input', updateNameNextBtn);
+updateNameNextBtn();
+
+nameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !nameNextBtn.disabled) nameNextBtn.click();
+});
+
+nameNextBtn.addEventListener('click', () => {
+  const name = nameInput.value.trim();
+  if (!name) return;
+  currentUser = name;
+  currentUserId = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+  localStorage.setItem('chatter_name', name);
+  goToRoomSelect();
+});
+
+// ===== ROOM SELECTOR =====
+function goToRoomSelect() {
+  roomGreetName.textContent = currentUser;
+  roomInput.value = '';
+  updateJoinRoomBtn();
+  showScreen(roomScreen);
+  loadRoomList();
+  subscribeToRoomList();
+  roomInput.focus();
+}
+
+backToNameBtn.addEventListener('click', () => {
+  cleanupRoomListChannel();
+  showScreen(nameScreen);
+  nameInput.focus();
+});
+
+function sanitizeRoomName(raw) {
+  return raw.toLowerCase().trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 30);
+}
+
+function updateJoinRoomBtn() {
+  joinRoomBtn.disabled = sanitizeRoomName(roomInput.value).length === 0;
+}
+roomInput.addEventListener('input', updateJoinRoomBtn);
+roomInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !joinRoomBtn.disabled) joinRoomBtn.click();
+});
+
+joinRoomBtn.addEventListener('click', () => {
+  const clean = sanitizeRoomName(roomInput.value);
+  if (!clean) return;
+  attemptJoinRoom(clean);
+});
+
+// Load admin-created rooms AND rooms from recent message activity
+async function loadRoomList() {
+  roomList.innerHTML = '<div class="empty-rooms">Loading rooms...</div>';
+
+  const [roomsRes, messagesRes] = await Promise.all([
+    supabase.from('rooms').select('name, password').order('created_at', { ascending: true }),
+    supabase.from('messages').select('room').order('created_at', { ascending: false }).limit(200)
+  ]);
+
+  if (roomsRes.error) console.error('Admin rooms error:', roomsRes.error);
+  if (messagesRes.error) console.error('Message rooms error:', messagesRes.error);
+
+  const adminRooms = roomsRes.data || [];
+  const adminRoomNames = new Set(adminRooms.map(r => r.name));
+
+  // Find organic rooms (from messages) not already admin-defined
+  const organicRooms = [];
+  const seen = new Set();
+  for (const row of messagesRes.data || []) {
+    if (row.room && !seen.has(row.room) && !adminRoomNames.has(row.room)) {
+      seen.add(row.room);
+      organicRooms.push(row.room);
+    }
+  }
+
+  // Build combined list: admin rooms first, then organic, then general fallback
+  const combined = [];
+  for (const r of adminRooms) combined.push({ name: r.name, password: r.password, isAdmin: true });
+  for (const r of organicRooms) combined.push({ name: r, password: null, isAdmin: false });
+
+  if (!combined.find(r => r.name === 'general')) {
+    combined.push({ name: 'general', password: null, isAdmin: false });
+  }
+
+  knownRooms = combined;
+  renderRoomList(combined);
+}
+
+function renderRoomList(rooms) {
+  if (rooms.length === 0) {
+    roomList.innerHTML = '<div class="empty-rooms">No rooms yet. Create one below!</div>';
+    return;
+  }
+
+  roomList.innerHTML = rooms.map(room => {
+    const hasPw = room.password && room.password.length > 0;
+    return `
+      <div class="room-item" data-room="${escapeHtml(room.name)}">
+        <span class="room-item-hash">#</span>
+        <span class="room-item-name">${escapeHtml(room.name)}</span>
+        ${room.isAdmin ? '<span class="room-item-admin-badge">OFFICIAL</span>' : ''}
+        ${hasPw ? '<span class="room-item-lock">🔒</span>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  roomList.querySelectorAll('.room-item').forEach(item => {
+    item.addEventListener('click', () => attemptJoinRoom(item.dataset.room));
+  });
+}
+
+function subscribeToRoomList() {
+  cleanupRoomListChannel();
+  roomListChannel = supabase
+    .channel('room-list-channel')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'messages' },
+      () => loadRoomList()
+    )
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms' },
+      () => loadRoomList()
+    )
+    .subscribe();
+}
+
+function cleanupRoomListChannel() {
+  if (roomListChannel) {
+    supabase.removeChannel(roomListChannel);
+    roomListChannel = null;
+  }
+}
+
+// ===== PASSWORD-PROTECTED ROOM HANDLING =====
+async function attemptJoinRoom(roomName) {
+  // Check if this room has a password in the rooms table
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('password')
+    .eq('name', roomName)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Room lookup error:', error);
+  }
+
+  const password = data?.password;
+  if (password && password.length > 0) {
+    // Room is protected — show password prompt
+    showPasswordPrompt(roomName, password);
+  } else {
+    // Public room — join directly
+    enterRoom(roomName);
+  }
+}
+
+function showPasswordPrompt(roomName, expectedPassword) {
+  pendingRoomJoin = { name: roomName, password: expectedPassword };
+  pwRoomName.textContent = '#' + roomName;
+  pwInput.value = '';
+  pwError.textContent = '';
+  passwordOverlay.classList.add('open');
+  setTimeout(() => pwInput.focus(), 50);
+}
+
+function hidePasswordPrompt() {
+  passwordOverlay.classList.remove('open');
+  pendingRoomJoin = null;
+}
+
+pwCancelBtn.addEventListener('click', hidePasswordPrompt);
+
+pwSubmitBtn.addEventListener('click', () => {
+  if (!pendingRoomJoin) return;
+  if (pwInput.value === pendingRoomJoin.password) {
+    const roomName = pendingRoomJoin.name;
+    hidePasswordPrompt();
+    enterRoom(roomName);
+  } else {
+    pwError.textContent = 'Incorrect password';
+    pwInput.value = '';
+    pwInput.focus();
+  }
+});
+
+pwInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') pwSubmitBtn.click();
+  if (e.key === 'Escape') hidePasswordPrompt();
+});
+
+// ===== ENTER CHAT ROOM =====
+async function enterRoom(room) {
+  currentRoom = room;
+  cleanupRoomListChannel();
+
+  currentRoomEl.textContent = room;
   displayName.textContent = currentUser;
-  msgInput.focus();
   messagesEl.innerHTML = '';
+  clearUnread();
+  updateTitle();
+
+  showScreen(chatScreen);
+  msgInput.focus();
+
   await loadRecentMessages();
   subscribeToNewMessages();
   joinPresence();
 }
 
 leaveBtn.addEventListener('click', async () => {
+  await leaveRoom();
+  goToRoomSelect();
+});
+
+async function leaveRoom() {
   if (messagesChannel) {
     await supabase.removeChannel(messagesChannel);
     messagesChannel = null;
@@ -93,14 +350,11 @@ leaveBtn.addEventListener('click', async () => {
     await supabase.removeChannel(presenceChannel);
     presenceChannel = null;
   }
-  chatScreen.classList.remove('active');
-  nameScreen.classList.add('active');
   usersList.innerHTML = '';
   onlineCount.textContent = '0';
-  joinBtn.disabled = false;
-  joinBtn.textContent = 'Join Chat →';
-  nameInput.focus();
-});
+  currentRoom = null;
+  clearUnread();
+}
 
 window.addEventListener('beforeunload', () => {
   if (presenceChannel) {
@@ -108,10 +362,12 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
+// ===== MESSAGES =====
 async function loadRecentMessages() {
   const { data, error } = await supabase
     .from('messages')
     .select('*')
+    .eq('room', currentRoom)
     .order('created_at', { ascending: false })
     .limit(MAX_MESSAGES);
   if (error) {
@@ -119,25 +375,32 @@ async function loadRecentMessages() {
     showSystemMessage('⚠️ ' + error.message);
     return;
   }
-  if (data) data.reverse().forEach(addMessage);
+  if (data) data.reverse().forEach(m => addMessage(m, true));
   scrollToBottom();
 }
 
 function subscribeToNewMessages() {
+  const roomForChannel = currentRoom;
   messagesChannel = supabase
-    .channel('messages-channel')
+    .channel(`messages-${roomForChannel}`)
     .on('postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages' },
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room=eq.${roomForChannel}`
+      },
       (payload) => {
-        addMessage(payload.new);
+        addMessage(payload.new, false);
         scrollToBottom();
       }
     )
     .subscribe();
 }
 
+// ===== PRESENCE =====
 function joinPresence() {
-  presenceChannel = supabase.channel('online-users', {
+  presenceChannel = supabase.channel(`online-${currentRoom}`, {
     config: { presence: { key: currentUserId } }
   });
   presenceChannel
@@ -149,6 +412,7 @@ function joinPresence() {
         await presenceChannel.track({
           name: currentUser,
           user_id: currentUserId,
+          room: currentRoom,
           joined_at: new Date().toISOString()
         });
       }
@@ -183,6 +447,7 @@ function colorFromName(name) {
   return `hsl(${Math.abs(hash) % 360}, 55%, 55%)`;
 }
 
+// ===== SEND =====
 function updateSendButton() {
   sendBtn.disabled = msgInput.value.trim().length === 0;
 }
@@ -199,12 +464,16 @@ sendBtn.addEventListener('click', sendMessage);
 
 async function sendMessage() {
   const text = msgInput.value.trim();
-  if (!text || !currentUser) return;
+  if (!text || !currentUser || !currentRoom) return;
   msgInput.value = '';
   updateSendButton();
   msgInput.focus();
   closeEmojiPicker();
-  const { error } = await supabase.from('messages').insert({ name: currentUser, text });
+  const { error } = await supabase.from('messages').insert({
+    name: currentUser,
+    text: text,
+    room: currentRoom
+  });
   if (error) {
     console.error('Send failed:', error);
     showSystemMessage('⚠️ ' + error.message);
@@ -213,13 +482,18 @@ async function sendMessage() {
   }
 }
 
-function addMessage(msg) {
+function addMessage(msg, isHistorical) {
   const isSelf = msg.name === currentUser;
   const wrapper = document.createElement('div');
   wrapper.className = `message ${isSelf ? 'self' : 'other'}`;
   const timeStr = msg.created_at ? formatTime(msg.created_at) : '';
   wrapper.innerHTML = `${!isSelf ? `<div class="msg-name">${escapeHtml(msg.name)}</div>` : ''}<div class="msg-bubble">${escapeHtml(msg.text)}</div><div class="msg-time">${timeStr}</div>`;
   messagesEl.appendChild(wrapper);
+
+  // Track unread: not your own, not historical, window not focused
+  if (!isHistorical && !isSelf && !windowFocused) {
+    incrementUnread();
+  }
 }
 
 function showSystemMessage(text) {
@@ -241,10 +515,11 @@ function formatTime(ts) {
 
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str);
   return div.innerHTML;
 }
 
+// ===== EMOJI PICKER =====
 let activeCategory = Object.keys(EMOJI_CATEGORIES)[0];
 
 function buildEmojiPicker() {
@@ -309,5 +584,41 @@ toggleSidebarBtn.addEventListener('click', () => {
 if (window.innerWidth <= 700) {
   sidebar.classList.add('hidden');
 }
+
+// ===== RESUME SESSION AFTER ADMIN VISIT =====
+// If we return from admin.html with saved state, restore it
+const savedSession = sessionStorage.getItem('chatter_session');
+if (savedSession) {
+  try {
+    const s = JSON.parse(savedSession);
+    sessionStorage.removeItem('chatter_session');
+    if (s.name && s.userId) {
+      currentUser = s.name;
+      currentUserId = s.userId;
+      nameInput.value = s.name;
+      if (s.room) {
+        // Rejoin their room automatically
+        enterRoom(s.room);
+      } else {
+        goToRoomSelect();
+      }
+    }
+  } catch(e) {
+    console.warn('Failed to restore session:', e);
+  }
+}
+
+// When user clicks admin link while chatting, save session
+document.querySelectorAll('a.admin-link, a#backToChatLink').forEach(link => {
+  link.addEventListener('click', () => {
+    if (currentUser) {
+      sessionStorage.setItem('chatter_session', JSON.stringify({
+        name: currentUser,
+        userId: currentUserId,
+        room: currentRoom
+      }));
+    }
+  });
+});
 
 console.log('✅ chat.js ready');
