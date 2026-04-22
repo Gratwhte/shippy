@@ -3,70 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin · Chatter</title>
-<link rel="icon" type="image/png" href="favicon.png">
+<title>Chatter</title>
+<link id="favicon" rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<!-- Admin login -->
-<div id="adminLoginScreen" class="screen active">
+<!-- Name entry screen -->
+<div id="nameScreen" class="screen active">
   <div class="card">
     <div class="logo-wrap">
-      <img src="logo.png" alt="" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-      <div class="logo-fallback" style="display:none;">⚙️</div>
+      <img src="logo.png" alt="Chatter logo" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo-fallback" style="display:none;">💬</div>
     </div>
-    <h1>admin</h1>
-    <p class="subtitle">enter password to continue</p>
-    <input type="password" id="adminPwInput" placeholder="admin password..." autocomplete="off">
-    <div id="adminLoginError" class="pw-error"></div>
-    <button id="adminLoginBtn">Log in →</button>
-    <a href="index.html" class="admin-link">← back to chat</a>
+    <h1>chatter</h1>
+    <p class="subtitle">a public chatroom for everyone</p>
+    <input type="text" id="nameInput" placeholder="your name..." maxlength="20" autocomplete="off">
+    <button id="nameNextBtn">Next →</button>
+    <a href="admin.html" class="admin-link">⚙️ admin</a>
   </div>
 </div>
 
-<!-- Admin dashboard -->
-<div id="adminDashboard" class="screen admin-dashboard">
-  <header class="admin-header">
-    <img src="logo.png" alt="" class="brand-logo" onerror="this.style.display='none';">
-    <div class="brand">⚙️ Admin Panel</div>
-    <div class="admin-nav">
-      <a href="index.html" class="text-btn" id="backToChatLink">💬 Back to chat</a>
-      <button id="adminLogoutBtn" class="icon-btn danger" title="Log out">✕</button>
+<!-- Room selection screen -->
+<div id="roomScreen" class="screen">
+  <div class="card card-wide">
+    <div class="room-header">
+      <h2>👋 hey <span id="roomGreetName"></span></h2>
+      <button id="backToNameBtn" class="text-btn">← change name</button>
     </div>
-  </header>
+    <p class="subtitle">pick a room or create your own</p>
 
-  <main class="admin-main">
-    <section class="admin-section">
-      <h2>Create Room</h2>
-      <p class="muted">Create a room with an optional password for private access.</p>
-      <div class="admin-form">
-        <div class="form-row">
-          <label>Room name</label>
-          <div class="room-input-row">
-            <span class="hash">#</span>
-            <input type="text" id="newRoomName" placeholder="room-name" maxlength="30" autocomplete="off">
-          </div>
-        </div>
-        <div class="form-row">
-          <label>Password <span class="optional">(optional — leave empty for public)</span></label>
-          <input type="text" id="newRoomPassword" placeholder="leave empty for public room" maxlength="50" autocomplete="off" class="plain-input">
-        </div>
-        <button id="createRoomBtn" class="btn-primary">Create Room</button>
-        <div id="createRoomMsg" class="form-msg"></div>
+    <div class="room-list-section">
+      <div class="section-label">ROOMS</div>
+      <div id="roomList" class="room-list">
+        <div class="empty-rooms">Loading rooms...</div>
       </div>
-    </section>
+    </div>
 
-    <section class="admin-section">
-      <h2>Manage Rooms</h2>
-      <p class="muted">Rooms you've created here. Delete to remove permanently.</p>
-      <div id="adminRoomList" class="admin-room-list">
-        <div class="empty-rooms">Loading...</div>
+    <div class="divider"><span>OR</span></div>
+
+    <div class="create-room">
+      <div class="section-label">QUICK JOIN</div>
+      <div class="room-input-row">
+        <span class="hash">#</span>
+        <input type="text" id="roomInput" placeholder="room-name" maxlength="30" autocomplete="off">
+        <button id="joinRoomBtn">Join</button>
       </div>
-    </section>
-  </main>
+      <p class="hint">letters, numbers, hyphens. no password = public room.</p>
+    </div>
+  </div>
 </div>
 
-<script type="module" src="admin.js"></script>
+<!-- Password prompt overlay -->
+<div id="passwordOverlay" class="overlay">
+  <div class="overlay-card">
+    <div class="lock-icon">🔒</div>
+    <h3>Password required</h3>
+    <p>Room <span id="pwRoomName"></span> is protected.</p>
+    <input type="password" id="pwInput" placeholder="enter password..." autocomplete="off">
+    <div id="pwError" class="pw-error"></div>
+    <div class="overlay-buttons">
+      <button id="pwCancelBtn" class="btn-secondary">Cancel</button>
+      <button id="pwSubmitBtn" class="btn-primary">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat screen -->
+<div id="chatScreen" class="screen">
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span class="online-label">ONLINE</span>
+      <span id="onlineCount" class="online-count">0</span>
+    </div>
+    <div id="usersList"></div>
+  </aside>
+
+  <div class="chat-main">
+    <header>
+      <button id="toggleSidebarBtn" class="icon-btn" title="Toggle users">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </button>
+      <img src="logo.png" alt="" class="brand-logo" onerror="this.style.display='none';">
+      <div class="brand">
+        <span class="room-hash">#</span><span id="currentRoom">general</span>
+      </div>
+      <div class="user-info">
+        <span class="online-dot"></span>
+        <span id="displayName"></span>
+        <button id="leaveBtn" class="icon-btn danger" title="Leave room">✕</button>
+      </div>
+    </header>
+
+    <main id="messages"></main>
+
+    <footer>
+      <div class="input-wrapper">
+        <button id="emojiBtn" class="icon-btn" title="Emoji">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+            <line x1="9" y1="9" x2="9.01" y2="9"/>
+            <line x1="15" y1="9" x2="15.01" y2="9"/>
+          </svg>
+        </button>
+        <input type="text" id="msgInput" placeholder="type a message..." maxlength="500" autocomplete="off">
+      </div>
+      <button id="sendBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <div id="emojiPicker" class="emoji-picker">
+    <div class="emoji-tabs" id="emojiTabs"></div>
+    <div class="emoji-grid" id="emojiGrid"></div>
+  </div>
+</div>
+
+<script type="module" src="chat.js"></script>
 </body>
 </html>
