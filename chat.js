@@ -40,7 +40,7 @@ const usersList = document.getElementById('usersList');
 const onlineCount = document.getElementById('onlineCount');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
-const faviconEl = document.getElementById('favicon');
+const faviconEl.href = unread ? 'imgs/cheddar-unread.png' : 'imgs/cheddar.png';
 
 let currentUser = null;
 let currentUserId = null;
@@ -106,7 +106,7 @@ function clearUnread() {
 }
 
 function updateTitle() {
-  const base = currentRoom ? `#${currentRoom} · Chatter` : 'Chatter';
+  const base = currentRoom ? `#${currentRoom} · Cheddar` : 'Cheddar';
   document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
 }
 
